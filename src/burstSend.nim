@@ -17,13 +17,24 @@ var sendQueue: Channel[string]
 var receiveQueue: Channel[string]
 sendQueue.open(maxItems = maxBuffer)
 receiveQueue.open(maxItems = maxBuffer)
+var loggingEnabled {.threadVar.}: bool
 
-logging.addHandler(logging.newConsoleLogger())
+proc checkEnableLogging() =
+  if not loggingEnabled: 
+    logging.addHandler(logging.newConsoleLogger())
+    loggingEnabled = true
 
-proc pushMessage*(message: string): bool {.discardable, exportpy.} = 
+proc pushMessage*(message: string): bool {.discardable, inline, exportpy.} = 
+    ## Adds a message to sending queue. Message will be transmitted in TCP, so
+    ## you need to add the full HTTP headers etc... in case that the server 
+    ## is a HTTP server. Returns true if message added and
+    ## false if queue is full
     return sendQueue.trySend(message)
     
-proc popResponse*(): string {.exportpy.} = 
+proc popResponse*(): string {.exportpy, inline.} = 
+    ## Removes and returns a message from sending queue. Returns empty string
+    ## if queue is empt. May block until next response due to race conditions 
+    ## if multiple threads perform popResponse
     let tried = receiveQueue.tryRecv()
     if tried.dataAvailable:
       return tried.msg
@@ -74,7 +85,7 @@ proc sendUntilChannelEmpty(client: AsyncSocket, target: string, port: int): Futu
     var received = 0
     # echo "POST http://" & target & ":" & $port & "/ HTTP/1.1\c\LHost: " & target & ":" & $port & "\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
     var failCounter = 0
-    while failCounter < 10_000 and not abortTransmission:
+    while not abortTransmission:
       var triedMessage = sendQueue.tryRecv()
       if triedMessage.dataAvailable:
         failCounter = 0
@@ -89,10 +100,11 @@ proc sendUntilChannelEmpty(client: AsyncSocket, target: string, port: int): Futu
             discard receiveQueue.trySend(response)
       else:
         inc(failCounter)
-        if (sendQueue.peek() == 0):
-          break
-        elif (failCounter mod 100) == 0:
-          sleep(1)
+        if (failCounter mod 100) == 0:
+          if (sendQueue.peek() == 0) and (failCounter > 10_000):
+            break
+          else:
+            sleep(1)
     debug "Thread Received: " & $received
     result = received
 
@@ -102,8 +114,10 @@ proc sendAllAndWait(target: string, port: int): int =
   result = waitFor client.sendUntilChannelEmpty(target, port)
 
 proc startTransmission*(target: string, port: int) {.exportpy.} =
+  ## Starts multithreaded sending of queue and blocks, until queue is empty
+  checkEnableLogging()
   abortTransmission = false
-  var targetCopy = target & "" # strange bug that causes crash
+  var targetCopy = target & "" # prevent strange bug that causes crash
   let numberOfProcessors = 
     if countProcessors() == 0: 4 else: countProcessors()
   var nrMessages = newSeq[int](numberOfProcessors)
@@ -117,16 +131,26 @@ proc startTransmission*(target: string, port: int) {.exportpy.} =
   info "Transmitted successfully " & $numberOfSentMessages & " messages"
 
 proc spawnTransmissionThread*(target:string = "localhost", port: int = 8000) {.inline, exportpy.} =
-  var targetCopy = target & "" # strange bug that causes crash
+  ## Starts multithreaded sending of queue but doesn't block. 
+  ## An additional "sync()" will wait until all messages are sent.
+  ## You may cancel the transmission by setting `abortTransmission = false`
+  var targetCopy = target & "" # prevent strange bug that causes crash
   spawn startTransmission(targetCopy, port)
+
+proc waitForTransmissionThread*() {.inline, exportpy.} = 
+  ## Waits for thransmissionthread to finish in blocking mode.
+  sync()
 
 proc main() =
   setLogFilter(logging.lvlDebug)
   let message = "POST / HTTP/1.1\c\LHost: localhost\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
+  spawnTransmissionThread("localhost", port = 9292)
   debug "feeding 1_000_000 messages"
   for i in 0 ..< 1_000_000:
     pushMessage(message)
-  startTransmission("localhost", port = 9292)
+  waitForTransmissionThread()
+    
+checkEnableLogging()
 
 when isMainModule:
   when system.appType != "lib":
