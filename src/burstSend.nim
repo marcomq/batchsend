@@ -3,7 +3,8 @@
 # Licensed under MIT License, see License file for more details
 # git clone https://github.com/marcomq/burstsend
 
-import asyncnet, asyncdispatch, os, cpuinfo, logging, nimpy
+import asyncnet, asyncdispatch, os, cpuinfo, logging, strutils
+import nimpy
 import threadpool
 {.experimental: "parallel".}
 
@@ -44,7 +45,7 @@ proc performRequest(client: AsyncSocket, message: string): Future[string] {.asyn
     await client.send(message)
     let sleepFinished = sleepAsync(timeoutMs)
     sleepFinished.addCallback timedOut
-
+    let isPost = message.startsWith("POST")
     var msg = await client.recvLine()
     var mayReceiveEmptyLine = false
     block receiveLoop:
@@ -57,9 +58,13 @@ proc performRequest(client: AsyncSocket, message: string): Future[string] {.asyn
             mayReceiveEmptyLine = false
         else: 
           mayReceiveEmptyLine = true
-        result = result & "\n" & msg
-        if unlikely(client.isClosed()):
+        result = result & msg
+        if isPost:
+          requestComplete = true
           break receiveLoop
+        elif unlikely(client.isClosed()):
+          break receiveLoop
+        result = result & "\n" 
         msg = await client.recvLine()
     requestComplete = true
   except:
