@@ -3,7 +3,7 @@
 # Licensed under MIT License, see License file for more details
 # git clone https://github.com/marcomq/burstsend
 
-import asyncnet, asyncdispatch, os, cpuinfo, logging, strutils
+import asyncnet, asyncdispatch, os, cpuinfo, logging
 import nimpy
 import threadpool
 {.experimental: "parallel".}
@@ -11,7 +11,6 @@ import threadpool
 var timeoutMs* = 5_000
 var maxBuffer* = 10_000_000
 var target* = "localhost"
-var targetPort* = 8000
 
 var abortTransmission* = false
 var sendQueue: Channel[string]
@@ -40,12 +39,12 @@ proc performRequest(client: AsyncSocket, message: string): Future[string] {.asyn
     proc timedOut(sleepFinished: Future[void]) =
       if unlikely(not requestComplete):
         abortMessage = true
-        echo "timed out"
+        error "timed out"
         result = ""
     await client.send(message)
     let sleepFinished = sleepAsync(timeoutMs)
     sleepFinished.addCallback timedOut
-    let isPost = message.startsWith("POST")
+    let isPost = true # message.startsWith("POST")
     var msg = await client.recvLine()
     var mayReceiveEmptyLine = false
     block receiveLoop:
@@ -59,7 +58,7 @@ proc performRequest(client: AsyncSocket, message: string): Future[string] {.asyn
         else: 
           mayReceiveEmptyLine = true
         result = result & msg
-        if isPost:
+        if not isPost:
           requestComplete = true
           break receiveLoop
         elif unlikely(client.isClosed()):
@@ -70,10 +69,10 @@ proc performRequest(client: AsyncSocket, message: string): Future[string] {.asyn
   except:
     result = ""
 
-proc sendUntilChannelEmpty(client: AsyncSocket, url: string, port: int) {.async.} =
-    waitFor client.connect(url, Port(port))
+proc sendUntilChannelEmpty(client: AsyncSocket, target: string, port: int): Future[int] {.async.} =
+    waitFor client.connect(target, Port(port))
     var received = 0
-     # message = "POST http://" & url & ":" & $port & "/ HTTP/1.1\c\LHost: " & url & ":" & $port & "\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
+    # echo "POST http://" & target & ":" & $port & "/ HTTP/1.1\c\LHost: " & target & ":" & $port & "\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
     var failCounter = 0
     while failCounter < 10_000 and not abortTransmission:
       var triedMessage = sendQueue.tryRecv()
@@ -81,11 +80,11 @@ proc sendUntilChannelEmpty(client: AsyncSocket, url: string, port: int) {.async.
         failCounter = 0
         let response = await client.performRequest(triedMessage.msg)
         if unlikely(response.len == 0):
-            echo "[ ] ", url
+            error "[ ] ", target
             # client.close()
-            # waitFor client.connect(url, Port(port))
+            # waitFor client.connect(target, Port(port))
         else:
-            # echo "[+]", response
+            # info "[+]", response
             inc(received)
             discard receiveQueue.trySend(response)
       else:
@@ -94,22 +93,32 @@ proc sendUntilChannelEmpty(client: AsyncSocket, url: string, port: int) {.async.
           break
         elif (failCounter mod 100) == 0:
           sleep(1)
-    echo received
+    debug "Thread Received: " & $received
+    result = received
 
 
-proc sendAllAndWait(url: string, port: int) =
+proc sendAllAndWait(target: string, port: int): int = 
   let client = newAsyncSocket()
-  waitFor client.sendUntilChannelEmpty(url, port)
+  result = waitFor client.sendUntilChannelEmpty(target, port)
 
-proc startTransmission*() {.exportpy.} =
+proc startTransmission*(target: string, port: int) {.exportpy.} =
   abortTransmission = false
+  var targetCopy = target & "" # strange bug that causes crash
   let numberOfProcessors = 
     if countProcessors() == 0: 4 else: countProcessors()
-  debug "starting with " & $numberOfProcessors & " connections/threads"
+  var nrMessages = newSeq[int](numberOfProcessors)
+  debug "starting with " & $nrMessages.len & " connections/threads"
   parallel:
-    for i in 0 ..< numberOfProcessors:
-      spawn sendAllAndWait(target, port = 9292)
-  debug "Ran successfully"
+    for i in 0 ..< nrMessages.len:
+      nrMessages[i] = spawn sendAllAndWait(targetCopy, port)
+  var numberOfSentMessages = 0
+  for i in 0 ..< nrMessages.len:
+    numberOfSentMessages += nrMessages[i]
+  info "Transmitted successfully " & $numberOfSentMessages & " messages"
+
+proc spawnTransmissionThread*(target:string = "localhost", port: int = 8000) {.inline, exportpy.} =
+  var targetCopy = target & "" # strange bug that causes crash
+  spawn startTransmission(targetCopy, port)
 
 proc main() =
   setLogFilter(logging.lvlDebug)
@@ -117,7 +126,7 @@ proc main() =
   debug "feeding 1_000_000 messages"
   for i in 0 ..< 1_000_000:
     pushMessage(message)
-  startTransmission()
+  startTransmission("localhost", port = 9292)
 
 when isMainModule:
   when system.appType != "lib":
