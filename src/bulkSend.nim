@@ -10,7 +10,6 @@ import threadpool
 
 var timeoutMs* = 5_000
 var maxBuffer* = 10_000_000
-var target* = "localhost"
 
 var abortTransmission* = false
 var sendQueue: Channel[string]
@@ -33,8 +32,8 @@ proc pushMessage*(message: string): bool {.discardable, inline, exportpy.} =
     
 proc popResponse*(): string {.exportpy, inline.} = 
     ## Removes and returns a message from sending queue. Returns empty string
-    ## if queue is empt. May block until next response due to race conditions 
-    ## if multiple threads perform popResponse
+    ## if queue is empty. May block until next response  
+    ## if multiple threads perform popResponse simultaneously.
     let tried = receiveQueue.tryRecv()
     if tried.dataAvailable:
       return tried.msg
@@ -42,6 +41,11 @@ proc popResponse*(): string {.exportpy, inline.} =
       return
     else: 
       return receiveQueue.recv()
+
+proc discardResponses*() {.exportpy, inline.} =
+    ## performs popRespnse and discards values until response queue is empty
+    while (receiveQueue.peek() > 0):
+      discard receiveQueue.tryRecv()
 
 proc performRequest(client: AsyncSocket, message: string): Future[string] {.async.} =
   try:
@@ -132,7 +136,7 @@ proc startTransmission*(target: string, port: int) {.exportpy.} =
 
 proc spawnTransmissionThread*(target:string = "localhost", port: int = 8000) {.inline, exportpy.} =
   ## Starts multithreaded sending of queue but doesn't block. 
-  ## An additional "sync()" will wait until all messages are sent.
+  ## An additional "sync()" would wait until all messages are sent.
   ## You may cancel the transmission by setting `abortTransmission = false`
   var targetCopy = target & "" # prevent strange bug that causes crash
   spawn startTransmission(targetCopy, port)

@@ -6,3 +6,6 @@ bin         = @["bulkSend"]
 srcDir      = "src"
 
 requires "nim >= 1.0.0", "nimpy >= 0.1.1"
+
+task docs, "create docs":
+    exec "nim doc -d:release --threads:on -o:docs/bulkSend.html src/bulkSend.nim"
