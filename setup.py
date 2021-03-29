@@ -10,10 +10,17 @@ setup(
     name = "bulksend",
     version = "0.1.0",
     author = "Marco Mengelkoch",
-    descripton = "Nim / Python library to feed HTTP server quickly with custom messages",
+    description = "Nim / Python library to feed HTTP server quickly with custom messages",
     long_description = long_description,
     long_description_content_type = "text/markdown",
     keywords = "nim, tcp, http-client",
-
+    url = "https://github.com/marcomq/bulksend",
+    license = "MIT",
+    classifiers = [
+        "Environment::Console",
+        "Programming Language::Python",
+        "Intended Audience::Developers",
+        "License::OSI Approved::MIT License"
+    ],
     ext_modules=nimporter.build_nim_extensions()
 )

@@ -9,7 +9,7 @@
 import parsecsv
 from os import paramStr, paramCount
 from streams import newFileStream
-import bulkSend
+import ../src/bulkSend
 
 proc sendCsv(csvFile: string) =
   var httpHeader = "POST / HTTP/1.1\c\LHost: localhost\c\LConnection: keep-alive\c\LContent-Length: "
