@@ -7,7 +7,7 @@ with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(
-    name = "burstsend",
+    name = "bulksend",
     version = "0.1.0",
     author = "Marco Mengelkoch",
     descripton = "Nim / Python library to feed HTTP server quickly with custom messages",

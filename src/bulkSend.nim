@@ -1,7 +1,7 @@
-# BurstSend Library 
+# bulkSend Library 
 # Copyright (C) 2021, by Marco Mengelkoch
 # Licensed under MIT License, see License file for more details
-# git clone https://github.com/marcomq/burstsend
+# git clone https://github.com/marcomq/bulksend
 
 import asyncnet, asyncdispatch, os, cpuinfo, logging
 import nimpy
