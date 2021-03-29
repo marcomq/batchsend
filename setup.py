@@ -22,5 +22,5 @@ setup(
         "Intended Audience::Developers",
         "License::OSI Approved::MIT License"
     ],
-    ext_modules=nimporter.build_nim_extensions()
+    ext_modules=nimporter.build_nim_extensions(danger=True, exclude_dirs=["test"])
 )
