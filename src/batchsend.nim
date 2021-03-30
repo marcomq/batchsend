@@ -10,13 +10,27 @@ import threadpool
 
 var timeoutMs* = 5_000
 var maxBuffer* = 10_000_000
-
+var waitForever* = false
 var abortTransmission* = false
+
+var loggingEnabled {.threadVar.}: bool
 var sendQueue: Channel[string]
 var receiveQueue: Channel[string]
 sendQueue.open(maxItems = maxBuffer)
 receiveQueue.open(maxItems = maxBuffer)
-var loggingEnabled {.threadVar.}: bool
+
+
+proc setWaitForever*(val: bool) {.exportpy, inline.} = 
+  waitForever = val
+
+proc setAbortTransmission*(val: bool) {.exportpy, inline.} = 
+  abortTransmission = val
+
+proc setMaxBuffer*(val: int) {.exportpy, inline.} = 
+  maxBuffer = val
+
+proc setTimeoutMs*(val: int) {.exportpy, inline.} = 
+  timeoutMs = val
 
 proc checkEnableLogging() =
   if not loggingEnabled: 
@@ -96,8 +110,8 @@ proc sendUntilChannelEmpty(client: AsyncSocket, target: string, port: int): Futu
         let response = await client.performRequest(triedMessage.msg)
         if unlikely(response.len == 0):
             error "[ ] ", target
-            # client.close()
-            # waitFor client.connect(target, Port(port))
+            if client.isClosed() and waitForever:
+              waitFor client.connect(target, Port(port))
         else:
             # info "[+]", response
             inc(received)
@@ -106,7 +120,11 @@ proc sendUntilChannelEmpty(client: AsyncSocket, target: string, port: int): Futu
         inc(failCounter)
         if (failCounter mod 100) == 0:
           if (sendQueue.peek() == 0) and (failCounter > 10_000):
-            break
+            if waitForever:
+              failCounter = 0
+              sleep(100)
+            else:
+              break
           else:
             sleep(1)
     debug "Thread Received: " & $received
@@ -117,21 +135,21 @@ proc sendAllAndWait(target: string, port: int): int =
   let client = newAsyncSocket()
   result = waitFor client.sendUntilChannelEmpty(target, port)
 
-proc startTransmission*(target: string, port: int) {.exportpy.} =
+proc startTransmission*(target: string = "localhost", port: int = 8000) {.exportpy.} =
   ## Starts multithreaded sending of queue and blocks, until queue is empty
   checkEnableLogging()
   abortTransmission = false
   var targetCopy = target & "" # prevent strange bug that causes crash
   let numberOfProcessors = 
     if countProcessors() == 0: 4 else: countProcessors()
-  var nrMessages = newSeq[int](numberOfProcessors)
-  debug "starting with " & $nrMessages.len & " connections/threads"
+  var nrConnections = newSeq[int](numberOfProcessors)
+  debug "starting with " & $nrConnections.len & " connections/threads"
   parallel:
-    for i in 0 ..< nrMessages.len:
-      nrMessages[i] = spawn sendAllAndWait(targetCopy, port)
+    for i in 0 ..< nrConnections.len:
+      nrConnections[i] = spawn sendAllAndWait(targetCopy, port)
   var numberOfSentMessages = 0
-  for i in 0 ..< nrMessages.len:
-    numberOfSentMessages += nrMessages[i]
+  for i in 0 ..< nrConnections.len:
+    numberOfSentMessages += nrConnections[i]
   info "Transmitted successfully " & $numberOfSentMessages & " messages"
 
 proc spawnTransmissionThread*(target:string = "localhost", port: int = 8000) {.inline, exportpy.} =

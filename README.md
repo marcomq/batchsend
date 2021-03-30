@@ -5,6 +5,9 @@
 Nim / Python library to feed HTTP server quickly with custom messages
 
 Currently uses AsyncSocket as this module is faster than AsyncHttpClient
+Notice that the library uses threads that might not catch all network errors
+You cannot catch those when using the python library - the application might
+crash in such a case.
 
 ## Docs
 
