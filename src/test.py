@@ -1,4 +1,6 @@
-import nimporter, batchsend, time
+import nimporter
+import batchsend
+import time
 # Trying to send 1 million messages. Wait 10 seconds, abort, wait for thread 
 # and count number of messages
 
