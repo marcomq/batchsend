@@ -35,7 +35,7 @@ proc sendCsv(csvFile: string) =
     let httpMessage = httpHeader & $message.len & "\c\L\c\L" & message
     transmitter.pushMessage(httpMessage)
   close(parser)
-  batchsend.waitForTransmissionThread()
+  batchsend.waitForSpawnedThreads()
 
 proc main() =
   try:

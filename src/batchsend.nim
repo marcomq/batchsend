@@ -3,7 +3,7 @@
 # Licensed under MIT License, see License file for more details
 # git clone https://github.com/marcomq/batchsend
 
-import asyncnet, asyncdispatch, os, cpuinfo, logging
+import asyncnet, asyncdispatch, os, cpuinfo, logging, strutils
 import nimpy
 import threadpool
 {.experimental: "parallel".}
@@ -12,28 +12,11 @@ type SendCfg = object
   timeoutMs: int
   maxBuffer: int
   waitForever: bool
-  abortTransmission: bool
+  abortTransmission: ptr bool
   target: string
   port: int
-  sendQueue: Channel[string]
-  receiveQueue: Channel[string]
-
-proc initSendCfg(
-  timeoutMs = 5_000, 
-  maxBuffer = 10_000_000,
-  waitForever = false,
-  abortTransmission = false,
-  target = "localhost",
-  port = 8000): SendCfg =
-    result.timeoutMs = timeoutMs
-    result.maxBuffer = maxBuffer
-    result.waitForever = waitForever
-    result.abortTransmission = abortTransmission
-    result.target = target
-    result.port = port
-    result.sendQueue.open(maxItems = maxBuffer)
-    result.receiveQueue.open(maxItems = maxBuffer)
-
+  sendQueue: ptr Channel[string]
+  receiveQueue: ptr Channel[string]
 
 proc newSendCfg*(
   timeoutMs: int = 5_000, 
@@ -43,55 +26,60 @@ proc newSendCfg*(
   target: string = "localhost",
   port: int = 8000 ): ref SendCfg {.exportpy.} =
     result.new
-    result[] = initSendCfg(
-      timeoutMs, maxBuffer, waitForever, abortTransmission, target, port
+    result.timeoutMs = timeoutMs
+    result.maxBuffer = maxBuffer
+    result.waitForever = waitForever
+    result.abortTransmission = cast[ptr bool](
+      allocShared0(sizeof(bool))
     )
+    result.abortTransmission[] = abortTransmission
+    result.target = target
+    result.port = port
+    result.sendQueue = cast[ptr Channel[string]](
+      allocShared0(sizeof(Channel[string]))
+    )
+    result.receiveQueue = cast[ptr Channel[string]](
+      allocShared0(sizeof(Channel[string]))
+    )
+    result.sendQueue[].open(maxItems = maxBuffer)
+    result.receiveQueue[].open(maxItems = maxBuffer)
 
 var loggingEnabled {.threadVar.}: bool
-
-
-proc setWaitForever*(self: ref SendCfg, value: bool)  {.exportpy, inline.} = 
-  self.waitForever = value
-
-proc setAbortTransmission*(self: ref SendCfg, val: bool) {.exportpy, inline.} = 
-  self.abortTransmission = val
-
-proc setMaxBuffer*(self: ref SendCfg, val: int) {.exportpy, inline.} = 
-  self.maxBuffer = val
-
-proc setTimeoutMs*(self: ref SendCfg, val: int) {.exportpy, inline.} = 
-  self.timeoutMs = val
 
 proc checkEnableLogging() =
   if not loggingEnabled: 
     logging.addHandler(logging.newConsoleLogger())
     loggingEnabled = true
 
-proc pushMessage*(self: ref SendCfg, message: string): bool {.discardable, inline, exportpy.} = 
+proc setAbortTransmission*(self: ref SendCfg, val: bool) {.exportpy, inline.} = 
+  self[].abortTransmission[] = val
+  checkEnableLogging()
+
+proc pushMessage*(self: ref SendCfg, message: string): bool {.exportpy, discardable, inline.} = 
     ## Adds a message to sending queue. Message will be transmitted in TCP, so
     ## you need to add the full HTTP headers etc... in case that the server 
     ## is a HTTP server. Returns true if message added and
     ## false if queue is full
-    return self.sendQueue.trySend(message)
+    return self.sendQueue[].trySend(message)
     
 proc popResponse*(self: ref SendCfg): string {.exportpy, inline.} = 
     ## Removes and returns a message from sending queue. Returns empty string
     ## if queue is empty. May block until next response  
     ## if multiple threads perform popResponse simultaneously.
-    let tried = self.receiveQueue.tryRecv()
+    let tried = self.receiveQueue[].tryRecv()
     if tried.dataAvailable:
       return tried.msg
-    elif self.receiveQueue.peek() == 0: 
+    elif self.receiveQueue[].peek() == 0: 
       return
     else: 
-      return self.receiveQueue.recv()
+      return self.receiveQueue[].recv()
 
-proc discardResponses*(self: ref SendCfg) {.exportpy, inline.} =
+proc discardResponses*(self: ref SendCfg) {.inline.} =
     ## performs popRespnse and discards values until response queue is empty
-    while (self.receiveQueue.peek() > 0):
-      discard self.receiveQueue.tryRecv()
+    while (self.receiveQueue[].peek() > 0):
+      discard self.receiveQueue[].tryRecv()
 
-proc performRequest(self: ptr SendCfg, client: AsyncSocket, message: string): Future[string] {.async.} =
+proc performRequest(self: ref SendCfg, client: AsyncSocket, message: string): Future[string] {.async.} =
   try:
     var requestComplete = false
     var abortMessage = false
@@ -103,11 +91,11 @@ proc performRequest(self: ptr SendCfg, client: AsyncSocket, message: string): Fu
     await client.send(message)
     let sleepFinished = sleepAsync(self.timeoutMs)
     sleepFinished.addCallback timedOut
-    let isPost = true # message.startsWith("POST")
+    let isPost = message.startsWith("POST")
     var msg = await client.recvLine()
     var mayReceiveEmptyLine = false
     block receiveLoop:
-      while not abortMessage and not self.abortTransmission:
+      while not abortMessage and not self.abortTransmission[]:
         # echo msg.toHex()
         if (msg.len == 0 or msg == "\c\L" or msg == "0"): # somehow, Nim reads "0" instead of '\0'
           if not mayReceiveEmptyLine: 
@@ -134,14 +122,11 @@ proc sendUntilChannelEmpty(self: ref SendCfg, client: AsyncSocket): Future[int] 
     var received = 0
     # echo "POST http://" & target & ":" & $port & "/ HTTP/1.1\c\LHost: " & target & ":" & $port & "\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
     var failCounter = 0
-    let messages = addr self.sendQueue
-    let responses = addr self.receiveQueue
-    let selfPtr = addr self[]
-    while not self.abortTransmission:
-      var triedMessage = messages[].tryRecv()
+    while not self.abortTransmission[]:
+      var triedMessage = self.sendQueue[].tryRecv()
       if triedMessage.dataAvailable:
         failCounter = 0
-        let response = await performRequest(selfPtr, client, triedMessage.msg)
+        let response = await performRequest(self, client, triedMessage.msg)
         if unlikely(response.len == 0):
             error "[ ] ", self.target
             if client.isClosed() and self.waitForever:
@@ -149,11 +134,11 @@ proc sendUntilChannelEmpty(self: ref SendCfg, client: AsyncSocket): Future[int] 
         else:
             # info "[+]", response
             inc(received)
-            discard responses[].trySend(response)
+            discard self.receiveQueue[].trySend(response)
       else:
         inc(failCounter)
-        if (failCounter mod 10) == 0:
-          if (messages[].peek() == 0) and (failCounter > 10_000):
+        if (failCounter mod 100) == 0:
+          if (self.sendQueue[].peek() == 0) and (failCounter > 10_000):
             if self.waitForever:
               failCounter = 0
               sleep(100)
@@ -172,12 +157,13 @@ proc sendAllAndWait(self: ref SendCfg): int =
 proc startTransmission*(self: ref SendCfg) {.exportpy.} =
   ## Starts multithreaded sending of queue and blocks, until queue is empty
   checkEnableLogging()
-  self.abortTransmission = false
+  self.abortTransmission[] = false
   # var targetCopy = self.target & "" # prevent strange bug that causes crash
   let numberOfProcessors = 
     if countProcessors() == 0: 4 else: countProcessors()
   var nrConnections = newSeq[int](numberOfProcessors)
   debug "starting with " & $nrConnections.len & " connections/threads"
+  assert(numberOfProcessors == nrConnections.len)
   parallel:
     for i in 0 ..< nrConnections.len:
       nrConnections[i] = spawn self.sendAllAndWait()
@@ -186,25 +172,26 @@ proc startTransmission*(self: ref SendCfg) {.exportpy.} =
     numberOfSentMessages += nrConnections[i]
   info "Transmitted successfully " & $numberOfSentMessages & " messages"
 
-proc spawnTransmissionThread*(self: ref SendCfg) {.inline, exportpy.} =
+proc spawnTransmissionThread*(self: ref SendCfg) {.exportpy, inline.} =
   ## Starts multithreaded sending of queue but doesn't block. 
   ## An additional "sync()" would wait until all messages are sent.
   ## You may cancel the transmission by setting `abortTransmission = false`
   # var targetCopy = target & "" # prevent strange bug that causes crash
   spawn self.startTransmission()
 
-proc waitForTransmissionThread*() {.inline, exportpy.} = 
+proc waitForSpawnedThreads*() {.exportpy, inline.} = 
   ## Waits for thransmissionthread to finish in blocking mode.
   sync()
 
 proc main() =
   setLogFilter(logging.lvlDebug)
+  checkEnableLogging()
   let message = "POST / HTTP/1.1\c\LHost: localhost\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
   var default = newSendCfg(port=9292)
+  info "spawning"
   spawn default.startTransmission()
-  checkEnableLogging()
-  debug "feeding 100_000 messages"
-  for i in 0 ..< 100_000:
+  debug "feeding 1_000_000 messages"
+  for i in 0 ..< 1_000_000:
     default.pushMessage(message)
   sync()
 
