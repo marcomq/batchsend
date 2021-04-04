@@ -1,16 +1,18 @@
-import nimporter, batchsend, time
+import nimporter
+import batchsend
+import time
 # Trying to send 1 million messages. Wait 10 seconds, abort, wait for thread 
 # and count number of messages
 
 message = "POST / HTTP/1.1\r\nHost: localhost\r\nConnection: keep-alive\r\nContent-Length: 11\r\n\r\nHello World"
-print("feeding 1000000 messages")
 try:
-    batchsend.setWaitForever(True)
+    cfg = batchsend.newSendCfg(port=9292, waitForever=False)
+    print("feeding 1000000 messages")
     for i in range(1000000):
-        batchsend.pushMessage(message)
-    batchsend.spawnTransmissionThread(port=9292)
-    time.sleep(10) # seconds
-    batchsend.setAbortTransmission(True)
-    batchsend.waitForTransmissionThread()
+        batchsend.pushMessage(cfg, message)
+    batchsend.spawnTransmissionThread(cfg)
+    time.sleep(3) # seconds
+    batchsend.setAbortTransmission(cfg, True)
+    batchsend.waitForSpawnedThreads()
 except:
     print("error during send")

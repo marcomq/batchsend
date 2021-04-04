@@ -22,7 +22,8 @@ proc sendCsv(csvFile: string) =
   parser.readHeaderRow()
   if parser.headers.len == 0:
     raise newException(CatchableError, "Cannot read csv header")
-  batchsend.spawnTransmissionThread("localhost", port = 9292)
+  let transmitter = batchsend.newSendCfg(port=9292)
+  transmitter.spawnTransmissionThread()
 
   while readRow(parser):
     var message: string
@@ -32,9 +33,9 @@ proc sendCsv(csvFile: string) =
         message &= "<" & parser.headers[i] & ">" & val & "</" & parser.headers[i] & ">"
         inc(i)
     let httpMessage = httpHeader & $message.len & "\c\L\c\L" & message
-    batchsend.pushMessage(httpMessage)
+    transmitter.pushMessage(httpMessage)
   close(parser)
-  batchsend.waitForTransmissionThread()
+  batchsend.waitForSpawnedThreads()
 
 proc main() =
   try:
