@@ -3,7 +3,7 @@
 # Licensed under MIT License, see License file for more details
 # git clone https://github.com/marcomq/batchsend
 
-import asyncnet, asyncdispatch, os, cpuinfo, logging, strutils
+import asyncnet, net, asyncdispatch, os, cpuinfo, logging, strutils
 import nimpy
 import threadpool
 {.experimental: "parallel".}
@@ -15,6 +15,7 @@ type SendCfg = object
   abortTransmission: ptr bool
   target: string
   port: int
+  useSsl: bool
   sendQueue: ptr Channel[string]
   receiveQueue: ptr Channel[string]
 
@@ -24,7 +25,8 @@ proc newSendCfg*(
   waitForever: bool = false,
   abortTransmission: bool = false,
   target: string = "localhost",
-  port: int = 8000 ): ref SendCfg {.exportpy.} =
+  port: int = 8000,
+  useSsl: bool = false ): ref SendCfg {.exportpy.} =
     result.new
     result.timeoutMs = timeoutMs
     result.maxBuffer = maxBuffer
@@ -35,6 +37,7 @@ proc newSendCfg*(
     result.abortTransmission[] = abortTransmission
     result.target = target
     result.port = port
+    result.useSsl = useSsl
     result.sendQueue = cast[ptr Channel[string]](
       allocShared0(sizeof(Channel[string]))
     )
@@ -88,10 +91,10 @@ proc performRequest(self: ref SendCfg, client: AsyncSocket, message: string): Fu
         abortMessage = true
         error "timed out"
         result = ""
-    await client.send(message)
     let sleepFinished = sleepAsync(self.timeoutMs)
     sleepFinished.addCallback timedOut
     let isPost = message.startsWith("POST")
+    asyncCheck client.send(message)
     var msg = await client.recvLine()
     var mayReceiveEmptyLine = false
     block receiveLoop:
@@ -110,15 +113,32 @@ proc performRequest(self: ref SendCfg, client: AsyncSocket, message: string): Fu
           break receiveLoop
         elif unlikely(client.isClosed()):
           break receiveLoop
-        result = result & "\n" 
-        msg = await client.recvLine()
+        result = result & "\n"
+        let lowerMsg = msg.toLower()
+        if lowerMsg.startsWith("content-length:"):
+          let contentLength = lowerMsg.replace("content-length:", "").replace(" ", "")
+          msg = await client.recv(contentLength.parseInt())
+          result = result & msg & "\n"
+          break receiveLoop
+        else: 
+          msg = await client.recvLine()
+
     requestComplete = true
   except:
     result = ""
 
-proc sendUntilChannelEmpty(self: ref SendCfg, client: AsyncSocket): Future[int] {.async.} =
+proc sendUntilChannelEmpty(self: ref SendCfg): Future[int] {.async.} =
     checkEnableLogging()
-    waitFor client.connect(self.target, Port(self.port))
+    let client = newAsyncSocket()
+    when defined ssl:
+      var ctx = newContext(verifyMode = CVerifyNone)
+      if self.useSsl:
+        wrapSocket(ctx, client)
+    try: 
+      await client.connect(self.target, Port(self.port))
+    except:
+      error "Couldn't connect to socket"
+      return 0
     var received = 0
     # echo "POST http://" & target & ":" & $port & "/ HTTP/1.1\c\LHost: " & target & ":" & $port & "\c\LConnection: keep-alive\c\LContent-Length: 11\c\L\c\LHello World"
     var failCounter = 0
@@ -126,12 +146,15 @@ proc sendUntilChannelEmpty(self: ref SendCfg, client: AsyncSocket): Future[int] 
       var triedMessage = self.sendQueue[].tryRecv()
       if triedMessage.dataAvailable:
         failCounter = 0
+        # measureStart
         let response = await performRequest(self, client, triedMessage.msg)
         if unlikely(response.len == 0):
+            # measureEnd
             error "[ ] ", self.target
             if client.isClosed() and self.waitForever:
               waitFor client.connect(self.target, Port(self.port))
         else:
+            # measureEnd
             # info "[+]", response
             inc(received)
             discard self.receiveQueue[].trySend(response)
@@ -146,13 +169,12 @@ proc sendUntilChannelEmpty(self: ref SendCfg, client: AsyncSocket): Future[int] 
               break
           else:
             sleep(1)
-    debug "Thread Received: " & $received
+    debug "Responses for thread: " & $received
     result = received
 
 
 proc sendAllAndWait(self: ref SendCfg): int = 
-  let client = newAsyncSocket()
-  result = waitFor self.sendUntilChannelEmpty(client)
+  result = waitFor self.sendUntilChannelEmpty()
 
 proc startTransmission*(self: ref SendCfg) {.exportpy.} =
   ## Starts multithreaded sending of queue and blocks, until queue is empty
@@ -170,7 +192,7 @@ proc startTransmission*(self: ref SendCfg) {.exportpy.} =
   var numberOfSentMessages = 0
   for i in 0 ..< nrConnections.len:
     numberOfSentMessages += nrConnections[i]
-  info "Transmitted successfully " & $numberOfSentMessages & " messages"
+  info "Transmitted " & $numberOfSentMessages & " messages"
 
 proc spawnTransmissionThread*(self: ref SendCfg) {.exportpy, inline.} =
   ## Starts multithreaded sending of queue but doesn't block. 
