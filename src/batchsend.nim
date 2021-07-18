@@ -6,18 +6,18 @@
 import asyncnet, net, asyncdispatch, os, cpuinfo, logging, strutils
 import nimpy
 import threadpool
-{.experimental: "parallel".}
-
-type SendCfg = object
-  timeoutMs: int
-  maxBuffer: int
-  waitForever: bool
-  abortTransmission: ptr bool
-  target: string
-  port: int
-  useSsl: bool
-  sendQueue: ptr Channel[string]
-  receiveQueue: ptr Channel[string]
+{.experimental: "parallel".}     
+type  
+  SendCfg = object of PyNimObjectExperimental
+    timeoutMs: int
+    maxBuffer: int
+    waitForever: bool
+    abortTransmission: ptr bool
+    target: string
+    port: int
+    useSsl: bool
+    sendQueue: ptr Channel[string]
+    receiveQueue: ptr Channel[string]
 
 proc newSendCfg*(
   timeoutMs: int = 5_000, 
