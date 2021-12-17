@@ -9,10 +9,10 @@ try:
     cfg = batchsend.newSendCfg(port=9292, waitForever=False)
     print("feeding 1000000 messages")
     for i in range(1000000):
-        batchsend.pushMessage(cfg, message)
-    batchsend.spawnTransmissionThread(cfg)
+        cfg.pushMessage(message)
+    cfg.spawnTransmissionThread()
     time.sleep(3) # seconds
-    batchsend.setAbortTransmission(cfg, True)
+    cfg.setAbortTransmission(True)
     batchsend.waitForSpawnedThreads()
 except:
     print("error during send")

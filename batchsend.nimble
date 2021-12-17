@@ -2,7 +2,6 @@ version     = "0.2.1"
 author      = "Marco Mengelkoch"
 description = "Nim / Python library to feed HTTP server quickly with custom messages"
 license     = "MIT"
-bin         = @["batchsend"]
 srcDir      = "src"
 
 requires "nim >= 1.2.10", "nimpy >= 0.1.1"

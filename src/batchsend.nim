@@ -8,7 +8,7 @@ import nimpy
 import threadpool
 {.experimental: "parallel".}     
 type  
-  SendCfg = object of PyNimObjectExperimental
+  SendCfg = ref object of PyNimObjectExperimental
     timeoutMs: int
     maxBuffer: int
     waitForever: bool
@@ -26,7 +26,7 @@ proc newSendCfg*(
   abortTransmission: bool = false,
   target: string = "localhost",
   port: int = 8000,
-  useSsl: bool = false ): ref SendCfg {.exportpy.} =
+  useSsl: bool = false ): SendCfg {.exportpy.} =
     result.new
     result.timeoutMs = timeoutMs
     result.maxBuffer = maxBuffer
@@ -54,18 +54,18 @@ proc checkEnableLogging() =
     logging.addHandler(logging.newConsoleLogger())
     loggingEnabled = true
 
-proc setAbortTransmission*(self: ref SendCfg, val: bool) {.exportpy, inline.} = 
+proc setAbortTransmission*(self: SendCfg, val: bool) {.exportpy, inline.} = 
   self[].abortTransmission[] = val
   checkEnableLogging()
 
-proc pushMessage*(self: ref SendCfg, message: string): bool {.exportpy, discardable, inline.} = 
+proc pushMessage*(self: SendCfg, message: string): bool {.exportpy, discardable, inline.} = 
     ## Adds a message to sending queue. Message will be transmitted in TCP, so
     ## you need to add the full HTTP headers etc... in case that the server 
     ## is a HTTP server. Returns true if message added and
     ## false if queue is full
     return self.sendQueue[].trySend(message)
     
-proc popResponse*(self: ref SendCfg): string {.exportpy, inline.} = 
+proc popResponse*(self: SendCfg): string {.exportpy, inline.} = 
     ## Removes and returns a message from sending queue. Returns empty string
     ## if queue is empty. May block until next response  
     ## if multiple threads perform popResponse simultaneously.
@@ -77,12 +77,12 @@ proc popResponse*(self: ref SendCfg): string {.exportpy, inline.} =
     else: 
       return self.receiveQueue[].recv()
 
-proc discardResponses*(self: ref SendCfg) {.inline.} =
+proc discardResponses*(self: SendCfg) {.inline.} =
     ## performs popRespnse and discards values until response queue is empty
     while (self.receiveQueue[].peek() > 0):
       discard self.receiveQueue[].tryRecv()
 
-proc performRequest(self: ref SendCfg, client: AsyncSocket, message: string): Future[string] {.async.} =
+proc performRequest(self: SendCfg, client: AsyncSocket, message: string): Future[string] {.async.} =
   try:
     var requestComplete = false
     var abortMessage = false
@@ -127,7 +127,7 @@ proc performRequest(self: ref SendCfg, client: AsyncSocket, message: string): Fu
   except:
     result = ""
 
-proc sendUntilChannelEmpty(self: ref SendCfg): Future[int] {.async.} =
+proc sendUntilChannelEmpty(self: SendCfg): Future[int] {.async.} =
     checkEnableLogging()
     let client = newAsyncSocket()
     when defined ssl:
@@ -173,10 +173,10 @@ proc sendUntilChannelEmpty(self: ref SendCfg): Future[int] {.async.} =
     result = received
 
 
-proc sendAllAndWait(self: ref SendCfg): int = 
+proc sendAllAndWait(self: SendCfg): int = 
   result = waitFor self.sendUntilChannelEmpty()
 
-proc startTransmission*(self: ref SendCfg) {.exportpy.} =
+proc startTransmission*(self: SendCfg) {.exportpy.} =
   ## Starts multithreaded sending of queue and blocks, until queue is empty
   checkEnableLogging()
   self.abortTransmission[] = false
@@ -194,7 +194,7 @@ proc startTransmission*(self: ref SendCfg) {.exportpy.} =
     numberOfSentMessages += nrConnections[i]
   info "Transmitted " & $numberOfSentMessages & " messages"
 
-proc spawnTransmissionThread*(self: ref SendCfg) {.exportpy, inline.} =
+proc spawnTransmissionThread*(self: SendCfg) {.exportpy, inline.} =
   ## Starts multithreaded sending of queue but doesn't block. 
   ## An additional "sync()" would wait until all messages are sent.
   ## You may cancel the transmission by setting `abortTransmission = false`
