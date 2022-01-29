@@ -1,7 +1,7 @@
 from setuptools import setup
-import nimporter
 
 import os
+import sys
 from shutil import copy, rmtree
 
 this_directory = os.path.abspath(os.path.dirname(__file__))
@@ -21,9 +21,18 @@ for index, fileName in enumerate(srcFiles):
 with open(targetDir + "/__init__.py", "w") as text_file:
     text_file.write("from batchsend.batchsend import *")
 
+def externalModules():
+    if not "sdist" in sys.argv:
+        import nimporter
+        return nimporter.build_nim_extensions(
+            danger=True, exclude_dirs=["test", "src"]
+        )
+    else:
+        return ""
+
 setup(
     name="batchsend",
-    version="0.3.3",
+    version="0.3.4",
     author="Marco Mengelkoch",
     author_email="MMengelkoch@gmx.de",
     scripts=["batchsend/__init__.py"],
@@ -40,9 +49,7 @@ setup(
         "Intended Audience :: Developers",
         "License :: OSI Approved :: MIT License",
     ],
-    ext_modules=nimporter.build_nim_extensions(
-        danger=True, exclude_dirs=["test", "src"]
-    ),
+    ext_modules=externalModules(),
     package_data={"": ["*.nim*"]},  # Distribute *.nim & *.nim.cfg source files
     # include_package_data=True,    # <- This line cannot work with package_data
     setup_requires=["choosenim_install"],  # Optional. Auto-installs Nim compiler

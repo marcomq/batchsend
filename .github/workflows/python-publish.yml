@@ -19,18 +19,21 @@ jobs:
  # ----------------------------------------------------------------------------
   build-linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ '3.x', '3.6', '3.8' ]
     steps:
       - uses: actions/checkout@v2
-      
-      - name: Set up Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
 
       - uses: jiro4989/setup-nim-action@v1
         with:
           nim-version: '1.6.x'
-
+      
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -45,22 +48,26 @@ jobs:
           WHEEL=dist/$(python3 -c 'import pathlib;print([*pathlib.Path("dist").glob("batchsend*")][0].name.replace("linux", "manylinux1"))')
           mv dist/$(python -c "import pathlib;print([*pathlib.Path('dist').glob('batchsend*')][0].name)") $WHEEL
           ls dist
-          twine upload dist/*
+          twine upload --skip-existing dist/*
 
   # ----------------------------------------------------------------------------
   build-win32:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        python-version: [ '3.x', '3.7', '3.8', '3.9' ]
     steps:
       - uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v1
-        with:
-          python-version: '3.x'
         
       - uses: jiro4989/setup-nim-action@v1
         with:
           nim-version: '1.6.x'
+
+      - name: Set up Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
 
       - name: Install dependencies
         run: |
@@ -74,7 +81,7 @@ jobs:
         run: |
           python setup.py bdist_wheel
           python setup.py sdist
-          twine upload dist/*
+          twine upload --skip-existing dist/*
 
   # ----------------------------------------------------------------------------
   build-macos:
