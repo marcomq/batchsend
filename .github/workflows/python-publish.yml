@@ -27,9 +27,9 @@ jobs:
         with:
           python-version: '3.x'
 
-      - uses: jiro4989/setup-nim-action@v1.0.2
+      - uses: jiro4989/setup-nim-action@v1
         with:
-          nim-version: '1.6.2'
+          nim-version: '1.6.x'
 
       - name: Install dependencies
         run: |
@@ -61,9 +61,9 @@ jobs:
         with:
           python-version: '3.x'
         
-      - uses: jiro4989/setup-nim-action@v1.0.2
+      - uses: jiro4989/setup-nim-action@v1
         with:
-          nim-version: '1.6.2'
+          nim-version: '1.6.x'
 
       - name: Install dependencies
         run: |
@@ -90,10 +90,10 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: '3.x'
-          
-      - uses: jiro4989/setup-nim-action@v1.0.2
+
+      - uses: jiro4989/setup-nim-action@v1
         with:
-          nim-version: '1.6.2'
+          nim-version: '1.6.x'
 
       - name: Install dependencies
         run: |
