@@ -36,19 +36,17 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install setuptools wheel twine nimporter
 
-      - name: Build source and binary
+      - name: Build binary and publish
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
+          python setup.py bdist_wheel || echo "failed on first build, retrying"
           python setup.py bdist_wheel
           WHEEL=dist/$(python3 -c 'import pathlib;print([*pathlib.Path("dist").glob("pebaz*")][0].name.replace("linux", "manylinux1"))')
           mv dist/$(python -c "import pathlib;print([*pathlib.Path('dist').glob('pebaz*')][0].name)") $WHEEL
-          python setup.py sdist
           ls dist
-          
-      - name: Publish package
-        uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          twine upload dist/*
 
   # ----------------------------------------------------------------------------
   build-win32:
@@ -70,15 +68,14 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install setuptools wheel twine nimporter
 
-      - name: Build binary
+      - name: Build source, binary and publish
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
           python setup.py bdist_wheel
-          
-      - name: Publish package
-        uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+          python setup.py sdist
+          twine upload dist/*
 
   # ----------------------------------------------------------------------------
   build-macos:
@@ -100,13 +97,16 @@ jobs:
           python3 -m pip install --upgrade pip
           python3 -m pip install setuptools wheel twine nimporter
 
-      - name: Build binary
+      - name: Build binary and publish
+        env:
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
           python3 setup.py bdist_wheel
           twine upload dist/*
           
-      - name: Publish package
-        uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
-        with:
-          user: __token__
-          password: ${{ secrets.PYPI_API_TOKEN }}
+#      - name: Publish package
+#        uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
+#        with:
+#          user: __token__
+#          password: ${{ secrets.PYPI_API_TOKEN }}

@@ -43,3 +43,4 @@ setup(
     ext_modules = nimporter.build_nim_extensions(danger=True, exclude_dirs=["test", "src"]),
     packages=["batchsend"]
 )
+
