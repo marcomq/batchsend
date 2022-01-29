@@ -8,9 +8,12 @@
 
 name: Upload Python Package
 
-on:
-  release:
-    types: [published]
+on:  
+  push:
+    paths:
+      - 'setup.py'
+    branches:
+      - main
 
 jobs:
  # ----------------------------------------------------------------------------
@@ -23,10 +26,10 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: '3.x'
-        
+
       - uses: jiro4989/setup-nim-action@v1.0.2
         with:
-          nim-version: '1.0.6'
+          nim-version: '1.6.2'
 
       - name: Install dependencies
         run: |
@@ -60,7 +63,7 @@ jobs:
         
       - uses: jiro4989/setup-nim-action@v1.0.2
         with:
-          nim-version: '1.0.6'
+          nim-version: '1.6.2'
 
       - name: Install dependencies
         run: |
@@ -87,9 +90,10 @@ jobs:
         uses: actions/setup-python@v1
         with:
           python-version: '3.x'
+          
       - uses: jiro4989/setup-nim-action@v1.0.2
         with:
-          nim-version: '1.0.6'
+          nim-version: '1.6.2'
 
       - name: Install dependencies
         run: |
