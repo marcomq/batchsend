@@ -22,7 +22,7 @@ with open(targetDir + "/__init__.py", "w") as text_file:
 
 setup(
     name = "batchsend",
-    version = "0.3.1",
+    version = "0.3.2",
     author = "Marco Mengelkoch",
     author_email = "MMengelkoch@gmx.de",
     install_requires=['nimporter'],
@@ -43,4 +43,3 @@ setup(
     ext_modules = nimporter.build_nim_extensions(danger=True, exclude_dirs=["test", "src"]),
     packages=["batchsend"]
 )
-
