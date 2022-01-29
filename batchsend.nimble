@@ -1,4 +1,4 @@
-version     = "0.3.2"
+version     = "0.3.3"
 author      = "Marco Mengelkoch"
 description = "Nim / Python library to feed HTTP server quickly with custom messages"
 license     = "MIT"
