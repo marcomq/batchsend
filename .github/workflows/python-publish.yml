@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [ '3.x', '3.6', '3.8' ]
+        python-version: [ '3.x', '3.8' ]
     steps:
       - uses: actions/checkout@v2
 
@@ -48,6 +48,7 @@ jobs:
           WHEEL=dist/$(python3 -c 'import pathlib;print([*pathlib.Path("dist").glob("batchsend*")][0].name.replace("linux", "manylinux1"))')
           mv dist/$(python -c "import pathlib;print([*pathlib.Path('dist').glob('batchsend*')][0].name)") $WHEEL
           ls dist
+          python setup.py sdist
           twine upload --skip-existing dist/*
 
   # ----------------------------------------------------------------------------
@@ -80,7 +81,6 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
           python setup.py bdist_wheel
-          python setup.py sdist
           twine upload --skip-existing dist/*
 
   # ----------------------------------------------------------------------------
