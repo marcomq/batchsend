@@ -19,9 +19,6 @@ jobs:
  # ----------------------------------------------------------------------------
   build-linux:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: [ '3.x', '3.8' ]
     steps:
       - uses: actions/checkout@v2
 
@@ -32,24 +29,27 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v1
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: 3.8
           architecture: x64
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           python -m pip install setuptools wheel twine nimporter
-
+    
+      - name: Build manylinux Python wheels
+        uses: RalfG/python-wheels-manylinux-build@v0.4.2-manylinux2014_x86_64
+        with:
+          python-versions: 'cp39-cp39m cp38-cp38m cp37-cp37m'
+          build-requirements: 'setuptools wheel twine nimporter'
+        
       - name: Build binary and publish
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
-          python setup.py bdist_wheel
-          WHEEL=dist/$(python3 -c 'import pathlib;print([*pathlib.Path("dist").glob("batchsend*")][0].name.replace("linux", "manylinux1"))')
-          mv dist/$(python -c "import pathlib;print([*pathlib.Path('dist').glob('batchsend*')][0].name)") $WHEEL
           ls dist
-          python setup.py sdist
-          twine upload --skip-existing dist/*
+          twine upload --skip-existing dist/*-manylinux*.whl
 
   # ----------------------------------------------------------------------------
   build-win32:
@@ -109,6 +109,7 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
           python3 setup.py bdist_wheel
+          python3 setup.py sdist
           twine upload dist/*
           
 #      - name: Publish package
