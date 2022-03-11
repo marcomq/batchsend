@@ -21,6 +21,9 @@ jobs:
  # ----------------------------------------------------------------------------
   build-linux:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [ '3.x', '3.8' ]
     steps:
       - uses: actions/checkout@v2
 
@@ -31,7 +34,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v1
         with:
-          python-version: 3.8
+          python-version: ${{ matrix.python-version }}
           architecture: x64
 
       - name: Install dependencies
@@ -39,18 +42,20 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install setuptools wheel twine nimporter
     
-      - name: Build manylinux Python wheels
-        uses: RalfG/python-wheels-manylinux-build@v0.4.2-manylinux2014_x86_64
-        with:
-          python-versions: 'cp37-cp37m cp38-cp38 cp39-cp39 cp310-cp310'
-          build-requirements: 'setuptools wheel twine nimporter'
-          pre-build-command: 'curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y'
+     # - name: Build manylinux Python wheels
+     #   uses: RalfG/python-wheels-manylinux-build@v0.4.2-manylinux2014_x86_64
+     #   with:
+     #     python-versions: 'cp37-cp37m cp38-cp38 cp39-cp39 cp310-cp310'
+     #     build-requirements: 'setuptools wheel twine nimporter'
+     #     pre-build-command: 'curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y'
         
       - name: Build binary and publish
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
+          python setup.py bdist_wheel
+          python setup.py sdist
           ls dist
           twine upload --skip-existing dist/*-manylinux*.whl
 
@@ -112,7 +117,6 @@ jobs:
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
         run: |
           python3 setup.py bdist_wheel
-          python3 setup.py sdist
           twine upload dist/*
           
 #      - name: Publish package
