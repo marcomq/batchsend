@@ -28,8 +28,7 @@ jobs:
         python-version: [ '3.x', '3.7', '3.8', '3.9', '3.10' ]
     steps:
       - uses: actions/checkout@v2
-
-      - uses: iffy/install-nim@v4.1.1
+      - uses: iffy/install-nim@v4
       
       - name: Set up Python
         uses: actions/setup-python@v1
@@ -41,13 +40,6 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install setuptools wheel twine nimporter
-    
-     # - name: Build manylinux Python wheels
-     #   uses: RalfG/python-wheels-manylinux-build@v0.4.2-manylinux2014_x86_64
-     #   with:
-     #     python-versions: 'cp37-cp37m cp38-cp38 cp39-cp39 cp310-cp310'
-     #     build-requirements: 'setuptools wheel twine nimporter'
-     #     pre-build-command: 'curl https://nim-lang.org/choosenim/init.sh -sSf | sh -s -- -y'
         
       - name: Build binary and publish
         env:
@@ -67,10 +59,7 @@ jobs:
         python-version: [ '3.x', '3.7', '3.8', '3.9' ]
     steps:
       - uses: actions/checkout@v2
-        
-      - uses: jiro4989/setup-nim-action@v1
-        with:
-          nim-version: '1.6.x'
+      - uses: iffy/install-nim@v4
 
       - name: Set up Python
         uses: actions/setup-python@v1
@@ -96,15 +85,12 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: iffy/install-nim@v4
 
       - name: Set up Python
         uses: actions/setup-python@v1
         with:
           python-version: '3.x'
-
-      - uses: jiro4989/setup-nim-action@v1
-        with:
-          nim-version: '1.6.x'
 
       - name: Install dependencies
         run: |
@@ -118,9 +104,4 @@ jobs:
         run: |
           python3 setup.py bdist_wheel
           twine upload dist/*
-          
-#      - name: Publish package
-#        uses: pypa/gh-action-pypi-publish@27b31702a0e7fc50959f5ad993c78deac1bdfc29
-#        with:
-#          user: __token__
-#          password: ${{ secrets.PYPI_API_TOKEN }}
+    
