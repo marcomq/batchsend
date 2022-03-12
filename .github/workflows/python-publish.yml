@@ -29,9 +29,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
-      - uses: jiro4989/setup-nim-action@v1
-        with:
-          nim-version: '1.6.x'
+      - uses: iffy/install-nim@v4.1.1
       
       - name: Set up Python
         uses: actions/setup-python@v1
